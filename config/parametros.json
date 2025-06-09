@@ -1,0 +1,114 @@
+{
+  "geral": {
+    "num_dias": 252,
+    "total_cotas": 100000,
+    "prop_cota_agente": 0.6,
+    "random_seed": 42
+  },
+  "fii": {
+    "num_cotas": 100000,
+    "caixa_inicial": 50000,
+    "dividendos_taxa": 0.95,
+    "dividendos_caixa_taxa": 0.05,
+    "investimento_fracao": 0.5,
+    "aluguel_factor_imovel": 0.005
+  },
+  "imoveis_lista": [
+    {
+      "valor": 1000000,
+      "vacancia": 0.1,
+      "custo_manutencao": 200,
+      "params": { "aluguel_factor": 0.005, "desvio_normal": 0.01 }
+    },
+    {
+      "valor": 2000000,
+      "vacancia": 0.2,
+      "custo_manutencao": 500,
+      "params": { "aluguel_factor": 0.005, "desvio_normal": 0.01 }
+    }
+  ],
+  "agente": {
+    "num_agentes": 500,
+    "caixa_inicial": 10000,
+    "cotas_iniciais_primeiro": 100,
+    "cotas_iniciais_outros": 100,
+    "num_vizinhos": 30,
+    "literacia_media": 0.3,
+    "literacia_std": 0.4,
+    "expectativa_inflacao_inicial": 0.05,
+    "expectativa_premio_inicial": 0.08,
+    "params": {
+      "piso_prob_negociar": 0.3,
+      "fator_lf_prob_negociar": 0.9,
+      "tipo_media_movel": "sma",
+      "media_movel_params": {
+        "dias_uteis_ano": 252,
+        "janela_curta_divisor": 4
+      },
+      "peso_retorno_privada": 0.8,
+      "peso_riqueza_privada": 0.4,
+      "ruido_std_privada": 0.05,
+      "peso_sentimento_inflacao": 0.9,
+      "peso_sentimento_expectativa": 0.9
+    }
+  },
+  "banco_central": {
+    "taxa_selic": 0.15,
+    "expectativa_inflacao": 0.07,
+    "premio_risco": 0.08
+  },
+  "midia": {
+    "valor_inicial": 0,
+    "sigma": 0.1,
+    "valores_fixos": {
+      "10": 1,
+      "20": 0,
+      "30": -1,
+      "40": 0,
+      "50": 2,
+      "100": 0,
+      "150": 0,
+      "200": 1,
+      "250": 1,
+      "300": -3,
+      "350": 0,
+      "400": 0,
+      "450": 0,
+      "500": 0,
+      "550": 1,
+      "600": -3,
+      "610": -3,
+      "620": -2,
+      "700": 0,
+      "800": 0,
+      "850": -1,
+      "900": 0,
+      "950": 1,
+      "1000": -1,
+      "1050": 0,
+      "1100": 1,
+      "1150": 1,
+      "1200": 0,
+      "1250": 1
+    }
+  },
+  "parametros_sentimento_e_ordem": {
+    "a0": 0.8,
+    "b0": 0.25,
+    "c0": 0.2,
+    "beta": 0.4,
+    "peso_preco_esperado": 0.2,
+    "quantidade_compra_min": 1,
+    "quantidade_compra_max": 30,
+    "divisor_quantidade_venda": 5
+  },
+  "mercado": {
+    "volatilidade_inicial": 0.1,
+    "dividendos_frequencia": 21,
+    "atualizacao_imoveis_frequencia": 126,
+    "num_processos_paralelos": 4
+  },
+  "plot": {
+    "window_volatilidade": 200
+  }
+}
