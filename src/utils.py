@@ -3,15 +3,15 @@ import pandas as pd
 from scipy.stats import truncnorm
 
 
-def calcular_media_movel_tecnica(precos_historicos, lf, tipo_media, params):
+def calcular_media_movel_tecnica(precos_historicos, lf, tipo_media, params_media):
     if not isinstance(precos_historicos, np.ndarray):
         precos_historicos = np.array(precos_historicos)
 
     if len(precos_historicos) == 0:
         return 0.0, 0.0
 
-    dias_uteis_ano = params.get("dias_uteis_ano", 252)
-    janela_curta_divisor = params.get("janela_curta_divisor", 4)
+    dias_uteis_ano = params_media.get("dias_uteis_ano", 252)
+    janela_curta_divisor = params_media.get("janela_curta_divisor", 4)
 
     omega = int(lf * dias_uteis_ano)
     if omega < 2:
@@ -20,28 +20,26 @@ def calcular_media_movel_tecnica(precos_historicos, lf, tipo_media, params):
     janela_curta = max(2, int(omega / janela_curta_divisor))
 
     if tipo_media == "sma":
-        sma_short = (
+        media_curta = (
             np.mean(precos_historicos[-janela_curta:])
             if len(precos_historicos) >= janela_curta
             else precos_historicos[-1]
         )
-        sma_longa = (
+        media_longa = (
             np.mean(precos_historicos[-omega:])
             if len(precos_historicos) >= omega
             else precos_historicos[-1]
         )
-        return sma_short, sma_longa
-    else:  # EMA é o padrão
+    else:
         serie_precos = pd.Series(precos_historicos[-omega:])
         if len(serie_precos) < 2:
             return precos_historicos[-1], precos_historicos[-1]
-
         alpha_short = 2 / (janela_curta + 1)
         alpha_long = 2 / (omega + 1)
+        media_curta = serie_precos.ewm(alpha=alpha_short, adjust=False).mean().iloc[-1]
+        media_longa = serie_precos.ewm(alpha=alpha_long, adjust=False).mean().iloc[-1]
 
-        ema_short = serie_precos.ewm(alpha=alpha_short, adjust=False).mean().iloc[-1]
-        ema_long = serie_precos.ewm(alpha=alpha_long, adjust=False).mean().iloc[-1]
-        return ema_short, ema_long
+    return media_curta, media_longa
 
 
 def gerar_literacia_financeira(media, desvio, minimo, maximo):

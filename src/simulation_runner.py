@@ -5,7 +5,8 @@ import os
 
 from .financial_instruments import FII, Imovel
 from .economic_agents import Agente
-from .market_environment import Mercado, BancoCentral, Midia
+from .market_environment import Mercado
+from .environment_factors import BancoCentral, Midia
 from . import utils
 
 
@@ -16,98 +17,69 @@ def run_single_simulation(sim_params: dict, run_id: str):
     random.seed(seed)
     np.random.seed(seed)
 
-    # Inicialização do FII e Imóveis
+    # Inicialização (como antes)
+    fii_cfg = sim_params["fii"]
     fii = FII(
-        num_cotas=sim_params["fii"]["num_cotas"],
-        caixa=sim_params["fii"]["caixa_inicial"],
-        params=sim_params["fii"],
+        num_cotas=fii_cfg["num_cotas"], caixa=fii_cfg["caixa_inicial"], params=fii_cfg
     )
     for imovel_cfg in sim_params["imoveis_lista"]:
-        imovel = Imovel(
-            valor=imovel_cfg["valor"],
-            vacancia=imovel_cfg["vacancia"],
-            custo_manutencao=imovel_cfg["custo_manutencao"],
-            params=imovel_cfg["params"],
-        )
-        fii.adicionar_imovel(imovel)
+        fii.adicionar_imovel(Imovel(**imovel_cfg))
 
     hist_precos_inicial = fii.inicializar_historico(dias=30)
 
-    # Criação dos Agentes
     agentes = []
-    agente_params_gerais = sim_params["agente"]
-    for i in range(agente_params_gerais["num_agentes"]):
+    agente_cfg = sim_params["agente"]
+    for i in range(agente_cfg["num_agentes"]):
+        cotas_iniciais = (
+            agente_cfg["cotas_iniciais_primeiro"]
+            if i == 0
+            else agente_cfg["cotas_iniciais_outros"]
+        )
         agente = Agente(
             id_agente=i,
-            literacia_financeira=utils.gerar_literacia_financeira(
-                agente_params_gerais["literacia_media"],
-                agente_params_gerais["literacia_std"],
-                0.2,
-                1.0,
+            lf=utils.gerar_literacia_financeira(
+                agente_cfg["literacia_media"], agente_cfg["literacia_std"], 0.2, 1.0
             ),
-            caixa=agente_params_gerais["caixa_inicial"],
-            cotas=(
-                agente_params_gerais["cotas_iniciais_primeiro"]
-                if i == 0
-                else agente_params_gerais["cotas_iniciais_outros"]
-            ),
-            exp_inflacao=agente_params_gerais["expectativa_inflacao_inicial"],
-            exp_premio=agente_params_gerais["expectativa_premio_inicial"],
+            caixa=agente_cfg["caixa_inicial"],
+            cotas=cotas_iniciais,
             hist_precos=hist_precos_inicial,
-            params=agente_params_gerais.get("params", {}),
+            params=agente_cfg.get("params", {}),
         )
         agentes.append(agente)
+    for ag in agentes:
+        ag.definir_vizinhos(agentes, num_vizinhos=agente_cfg["num_vizinhos"])
 
-    for agente in agentes:
-        agente.definir_vizinhos(
-            agentes, num_vizinhos=agente_params_gerais["num_vizinhos"]
-        )
-
-    # Criação do Ambiente de Mercado
     bc = BancoCentral(sim_params["banco_central"])
     midia = Midia({**sim_params["midia"], "num_dias": sim_params["geral"]["num_dias"]})
     mercado = Mercado(agentes, fii, bc, midia, sim_params["mercado"])
 
     # Loop da Simulação
-    historico_precos_fii = []
-    sentimento_medio_diario = []
     num_dias = sim_params["geral"]["num_dias"]
-
+    sentimento_medio_diario = []
     for dia in range(1, num_dias + 1):
-        print(f"Dia {dia}/{num_dias}")
+        print(f"Executando Dia {dia}/{num_dias}")
         mercado.executar_dia(sim_params["parametros_sentimento_e_ordem"])
         sentimento_medio_diario.append(utils.calcular_sentimento_medio(mercado.agentes))
-        historico_precos_fii.append(mercado.fii.preco_cota)
 
     mercado.fechar_pool()
 
-    # Pós-processamento e Plotagem
-    historico_precos_fii_np = np.array(historico_precos_fii)
-    # log_returns = np.diff(np.log(historico_precos_fii_np[historico_precos_fii_np > 0]))
+    # --- COLETA DE RESULTADOS BRUTOS ---
+    historico_precos_fii = np.array(mercado.fii.historico_precos[-num_dias:])
+    log_returns = np.diff(np.log(historico_precos_fii[historico_precos_fii > 0]))
 
-    # ... (cálculo da volatilidade rolante) ...
+    window = sim_params["plot"]["window_volatilidade"]
+    volatilidade_rolante = np.full_like(log_returns, np.nan)
+    for i in range(window, len(log_returns)):
+        volatilidade_rolante[i] = np.std(log_returns[i - window : i]) * (252**0.5)
 
-    # Salvar Gráficos
-    if not os.path.exists("results/plots"):
-        os.makedirs("results/plots")
-
-    plot_path = f"results/plots/evolucao_preco_{run_id}.png"
-    fig, ax = plt.subplots(figsize=(12, 5))
-    ax.plot(range(num_dias), historico_precos_fii_np, label="Preço da Cota do FII")
-    ax.set_title(f"Evolução do Preço do FII - {run_id}")
-    ax.set_ylabel("Preço")
-    ax.set_xlabel("Dias")
-    ax.legend()
-    plt.grid(True)
-    plt.savefig(plot_path)
-    plt.close(fig)
-
-    # Retornar resultados chave
+    # --- RETORNANDO O DICIONÁRIO COMPLETO ---
     results = {
-        "preco_final_cota": fii.preco_cota,
-        "caixa_final_fii": fii.caixa,
-        "sentimento_medio_final": sentimento_medio_diario[-1],
-        "plot_path": plot_path,
+        "historico_precos_fii": historico_precos_fii,
+        "log_returns": log_returns,
+        "volatilidade_rolante": volatilidade_rolante,
+        "sentimento_medio_diario": sentimento_medio_diario,
+        "objeto_fii_final": mercado.fii,
+        "lista_agentes_final": mercado.agentes,
     }
 
     print(f"--- Simulação {run_id} Concluída ---")

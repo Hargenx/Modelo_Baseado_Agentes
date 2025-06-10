@@ -1,36 +1,69 @@
 import json
 import os
-
+import numpy as np
+import matplotlib.pyplot as plt
 from src.simulation_runner import run_single_simulation
 
 if __name__ == "__main__":
-    # Carregar parâmetros do arquivo JSON
     with open("config/parametros.json", "r", encoding="utf-8") as f:
         sim_params = json.load(f)
 
-    # Definir um ID para esta execução
-    run_id = "simulacao_base"
+    run_id = "simulacao_completa"
+    os.makedirs("results/plots", exist_ok=True)
 
-    # Criar diretórios de resultados, se não existirem
-    if not os.path.exists("results"):
-        os.makedirs("results")
-
-    # Executar a simulação
+    # Executar a simulação e receber o dicionário completo de resultados
     resultados = run_single_simulation(sim_params, run_id)
 
-    # Exibir os resultados retornados
-    print("\n--- Resultados Resumidos ---")
-    for chave, valor in resultados.items():
-        if isinstance(valor, float):
-            print(f"{chave}: {valor:,.2f}")
-        else:
-            print(f"{chave}: {valor}")
-    print(f"Gráfico salvo em: {resultados['plot_path']}")
+    # --- EXIBIÇÃO FINAL (Lógica movida para cá) ---
+    print("\n--- Resultados Finais ---")
 
-    # ====================================================================
-    # NOTA: Para rodar múltiplos cenários a partir de uma planilha,
-    # você substituiria o código acima por um loop que lê cada linha
-    # da planilha (usando pandas), ajusta o dicionário sim_params
-    # para cada linha, define um run_id único e chama run_single_simulation.
-    # Os resultados seriam então escritos de volta na planilha.
-    # ====================================================================
+    # Extrair os dados do dicionário de resultados
+    fii = resultados["objeto_fii_final"]
+    agentes = resultados["lista_agentes_final"]
+    historico_precos_fii = resultados["historico_precos_fii"]
+    volatilidade_rolante = resultados["volatilidade_rolante"]
+    num_dias = sim_params["geral"]["num_dias"]
+
+    # Imprimir o resumo
+    print(f"Preço Final da Cota: R${fii.preco_cota:,.2f}")
+    print(f"Caixa Final do FII: R${fii.caixa:,.2f}")
+    for agente in agentes:
+        riqueza_final = agente.caixa + agente.carteira.get("FII", 0) * fii.preco_cota
+        print(
+            f"Agente {agente.id}: Caixa: R${agente.caixa:,.2f}, Sentimento: {agente.sentimento:.2f}, Riqueza: R${riqueza_final:,.2f}"
+        )
+
+    # Gerar e mostrar os gráficos
+    print("\nGerando gráficos...")
+    dias_array = np.arange(num_dias)
+    fig, ax = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+
+    ax[0].plot(dias_array, historico_precos_fii, label="Preço da Cota do FII")
+    ax[0].set_title("Evolução do Preço do FII")
+    ax[0].set_ylabel("Preço")
+    ax[0].legend()
+    ax[0].grid(True)
+
+    # Ajuste para plotar a volatilidade corretamente
+    dias_vol = np.arange(len(volatilidade_rolante)) + (
+        num_dias - len(volatilidade_rolante)
+    )
+    ax[1].plot(
+        dias_vol,
+        volatilidade_rolante,
+        label=f"Volatilidade Rolante ({sim_params['plot']['window_volatilidade']} dias)",
+        color="orange",
+    )
+    ax[1].set_title("Volatilidade Rolante dos Retornos Logarítmicos")
+    ax[1].set_ylabel("Volatilidade")
+    ax[1].set_xlabel("Dias")
+    ax[1].legend()
+    ax[1].grid(True)
+
+    plt.tight_layout()
+
+    # Salvar e mostrar o gráfico
+    plot_path = f"results/plots/{run_id}_final_plot.png"
+    plt.savefig(plot_path)
+    print(f"Gráfico salvo em: {plot_path}")
+    plt.show()  # Mostra o gráfico na tela ao executar o script
