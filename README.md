@@ -50,8 +50,8 @@ O projeto está organizado na seguinte estrutura de diretórios e arquivos:
 1. **Clonar o Repositório**
 
     ```bash
-    git clone <URL_DO_SEU_REPOSITORIO>
-    cd ABM_FII_Projeto
+    git clone https://github.com/Hargenx/Modelo_Baseado_Agentes
+    cd Modelo_Baseado_Agentes
     ```
 
 2. **Instalar as Dependências**
