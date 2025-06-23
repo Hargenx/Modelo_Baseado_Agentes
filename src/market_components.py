@@ -1,16 +1,16 @@
+# src/market_components.py
+
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
-
-
+from typing import TYPE_CHECKING, Dict, List
 
 if TYPE_CHECKING:
     from .economic_agents import Agente
-    from src.market_environment import Mercado
+    from .market_environment import Mercado
 
 
 @dataclass
 class Ordem:
-    tipo: str
+    tipo: str  # "compra" ou "venda"
     agente: "Agente"
     ativo: str
     preco_limite: float
@@ -29,44 +29,70 @@ class Transacao:
         valor_total = self.quantidade * self.preco_execucao
         self.comprador.caixa -= valor_total
         self.vendedor.caixa += valor_total
+
         self.comprador.carteira[self.ativo] += self.quantidade
         self.vendedor.carteira[self.ativo] -= self.quantidade
 
 
-class OrderBook:
-    def __init__(self):
-        self.ordens_compra = {}
-        self.ordens_venda = {}
+class LivroOrdens:
+    """
+    Livro de ordens (Order Book) para armazenar e executar ordens de compra e venda.
+    """
 
-    def adicionar_ordem(self, ordem: Ordem):
-        ordens = self.ordens_compra if ordem.tipo == "compra" else self.ordens_venda
-        ordens.setdefault(ordem.ativo, []).append(ordem)
+    def __init__(self) -> None:
+        self.ordens_compra: Dict[str, List[Ordem]] = {}
+        self.ordens_venda: Dict[str, List[Ordem]] = {}
 
-    def executar_ordens(self, ativo: str, mercado: "Mercado"):
-        if ativo in self.ordens_compra and ativo in self.ordens_venda:
-            compras = self.ordens_compra[ativo]
-            vendas = self.ordens_venda[ativo]
-            compras.sort(key=lambda x: x.preco_limite, reverse=True)
-            vendas.sort(key=lambda x: x.preco_limite)
+    def adicionar_ordem(self, ordem: Ordem) -> None:
+        """
+        Adiciona uma ordem ao livro, separando entre compra e venda.
+        """
+        destino = self.ordens_compra if ordem.tipo == "compra" else self.ordens_venda
+        destino.setdefault(ordem.ativo, []).append(ordem)
 
-            while (
-                compras and vendas and compras[0].preco_limite >= vendas[0].preco_limite
-            ):
-                compra = compras[0]
-                venda = vendas[0]
-                preco_execucao = (compra.preco_limite + venda.preco_limite) / 2
-                qtd_exec = min(compra.quantidade, venda.quantidade)
+    def executar_ordens(self, ativo: str, mercado: "Mercado") -> None:
+        """
+        Executa as ordens para um ativo, cruzando ordens de compra e venda.
+        """
+        if ativo not in self.ordens_compra or ativo not in self.ordens_venda:
+            return
 
-                transacao = Transacao(
-                    compra.agente, venda.agente, ativo, qtd_exec, preco_execucao
-                )
-                transacao.executar()
+        compras = self.ordens_compra[ativo]
+        vendas = self.ordens_venda[ativo]
 
-                mercado.fii.preco_cota = preco_execucao
-                compra.quantidade -= qtd_exec
-                venda.quantidade -= qtd_exec
+        # Ordena as ordens: compras por maior preço, vendas por menor
+        compras.sort(key=lambda ordem: ordem.preco_limite, reverse=True)
+        vendas.sort(key=lambda ordem: ordem.preco_limite)
 
-                if compra.quantidade == 0:
-                    compras.pop(0)
-                if venda.quantidade == 0:
-                    vendas.pop(0)
+        while compras and vendas:
+            melhor_compra = compras[0]
+            melhor_venda = vendas[0]
+
+            if melhor_compra.preco_limite < melhor_venda.preco_limite:
+                break  # Não há mais match possível
+
+            preco_execucao = (
+                melhor_compra.preco_limite + melhor_venda.preco_limite
+            ) / 2
+            qtd_exec = min(melhor_compra.quantidade, melhor_venda.quantidade)
+
+            transacao = Transacao(
+                comprador=melhor_compra.agente,
+                vendedor=melhor_venda.agente,
+                ativo=ativo,
+                quantidade=qtd_exec,
+                preco_execucao=preco_execucao,
+            )
+            transacao.executar()
+
+            # Atualiza o preço do ativo no mercado
+            mercado.fii.preco_cota = preco_execucao
+
+            # Atualiza quantidades remanescentes
+            melhor_compra.quantidade -= qtd_exec
+            melhor_venda.quantidade -= qtd_exec
+
+            if melhor_compra.quantidade == 0:
+                compras.pop(0)
+            if melhor_venda.quantidade == 0:
+                vendas.pop(0)

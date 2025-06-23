@@ -14,12 +14,12 @@ if __name__ == "__main__":
     # Executar a simulação e receber o dicionário completo de resultados
     resultados = run_single_simulation(sim_params, run_id)
 
-    # --- EXIBIÇÃO FINAL (Lógica movida para cá) ---
+    # --- EXIBIÇÃO FINAL ---
     print("\n--- Resultados Finais ---")
 
     # Extrair os dados do dicionário de resultados
     fii = resultados["objeto_fii_final"]
-    agentes = resultados["lista_agentes_final"]
+    investidores = resultados["lista_investidores_final"]
     historico_precos_fii = resultados["historico_precos_fii"]
     volatilidade_rolante = resultados["volatilidade_rolante"]
     num_dias = sim_params["geral"]["num_dias"]
@@ -27,10 +27,13 @@ if __name__ == "__main__":
     # Imprimir o resumo
     print(f"Preço Final da Cota: R${fii.preco_cota:,.2f}")
     print(f"Caixa Final do FII: R${fii.caixa:,.2f}")
-    for agente in agentes:
-        riqueza_final = agente.caixa + agente.carteira.get("FII", 0) * fii.preco_cota
+    for investidor in investidores:
+        riqueza_final = (
+            investidor.caixa + investidor.carteira.get("FII", 0) * fii.preco_cota
+        )
         print(
-            f"Agente {agente.id}: Caixa: R${agente.caixa:,.2f}, Sentimento: {agente.sentimento:.2f}, Riqueza: R${riqueza_final:,.2f}"
+            f"Investidor {investidor.id}: Caixa: R${investidor.caixa:,.2f}, "
+            f"Sentimento: {investidor.sentimento:.2f}, Riqueza: R${riqueza_final:,.2f}"
         )
 
     # Gerar e mostrar os gráficos
@@ -44,7 +47,6 @@ if __name__ == "__main__":
     ax[0].legend()
     ax[0].grid(True)
 
-    # Ajuste para plotar a volatilidade corretamente
     dias_vol = np.arange(len(volatilidade_rolante)) + (
         num_dias - len(volatilidade_rolante)
     )
@@ -66,4 +68,4 @@ if __name__ == "__main__":
     plot_path = f"results/plots/{run_id}_final_plot.png"
     plt.savefig(plot_path)
     print(f"Gráfico salvo em: {plot_path}")
-    plt.show()  # Mostra o gráfico na tela ao executar o script
+    plt.show()

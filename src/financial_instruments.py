@@ -13,73 +13,70 @@ class Imovel:
         self.valor = valor
         self.vacancia = vacancia
         self.custo_manutencao = custo_manutencao
-        self.params = params if params is not None else {}
-        self.aluguel_factor = self.params.get("aluguel_factor", 0.005)
+        self.params = params or {}
+        self.aluguel_fator = self.params.get("aluguel_factor", 0.005)
         self.desvio_normal = self.params.get("desvio_normal", 0.1)
-        self.aluguel = self.valor * self.aluguel_factor
+        self.aluguel = self.valor * self.aluguel_fator
 
     def gerar_fluxo_aluguel(self) -> float:
-        return self.aluguel * (
-            1 - self.vacancia * (1 + np.random.normal(0, self.desvio_normal))
+        vacancia_ajustada = self.vacancia * (
+            1 + np.random.normal(0, self.desvio_normal)
         )
+        return self.aluguel * (1 - vacancia_ajustada)
 
 
 class FII:
     def __init__(self, num_cotas: int, caixa: float, params: dict = None):
         self.num_cotas = num_cotas
         self.caixa = caixa
-        self.params = params if params is not None else {}
+        self.params = params or {}
         self.imoveis: List[Imovel] = []
         self.preco_cota = 0.0
-        self.historico_precos = []
-        self.historico_dividendos = []
+        self.historico_precos: List[float] = []
+        self.historico_dividendos: List[float] = []
 
     def adicionar_imovel(self, imovel: Imovel) -> None:
         self.imoveis.append(imovel)
 
-    def valor_patrimonial_por_acao(self) -> float:
-        if not self.imoveis:
-            return self.caixa / self.num_cotas if self.num_cotas > 0 else 0
-        total_valor_imoveis = sum(imovel.valor for imovel in self.imoveis)
-        return (self.caixa + total_valor_imoveis) / self.num_cotas
+    def valor_patrimonial_por_cota(self) -> float:
+        valor_imoveis = sum(imovel.valor for imovel in self.imoveis)
+        total_patrimonio = self.caixa + valor_imoveis
+        return total_patrimonio / self.num_cotas if self.num_cotas > 0 else 0
 
-    def calcular_fluxo_aluguel(self) -> float:
+    def calcular_fluxo_total_aluguel(self) -> float:
         return sum(imovel.gerar_fluxo_aluguel() for imovel in self.imoveis)
 
     def distribuir_dividendos(self) -> float:
-        fluxo_aluguel = self.calcular_fluxo_aluguel()
-        dividendos_rate = self.params.get("dividendos_taxa", 0.95)
-        caixa_rate = self.params.get("dividendos_caixa_taxa", 0.05)
+        fluxo_total = self.calcular_fluxo_total_aluguel()
+        taxa_dividendo = self.params.get("dividendos_taxa", 0.95)
+        taxa_caixa = self.params.get("dividendos_caixa_taxa", 0.05)
 
-        dividendos = (
-            fluxo_aluguel * dividendos_rate / self.num_cotas
-            if self.num_cotas > 0
-            else 0
+        dividendos_por_cota = (
+            fluxo_total * taxa_dividendo / self.num_cotas if self.num_cotas > 0 else 0
         )
-        self.historico_dividendos.append(dividendos)
-        self.caixa += fluxo_aluguel * caixa_rate
-        return dividendos
+        self.historico_dividendos.append(dividendos_por_cota)
+        self.caixa += fluxo_total * taxa_caixa
+        return dividendos_por_cota
 
-    def atualizar_imoveis_investir(self, inflacao: float) -> None:
-        investimento_fracao = self.params.get("investimento_fracao", 0.50)
-        valor_investir = investimento_fracao * self.caixa
-        self.caixa -= valor_investir
+    def atualizar_imoveis_com_investimento(self, inflacao: float) -> None:
+        fracao_investimento = self.params.get("investimento_fracao", 0.50)
+        valor_investimento = fracao_investimento * self.caixa
+        self.caixa -= valor_investimento
 
-        num_imoveis = len(self.imoveis)
-        investimento_por_imovel = valor_investir / num_imoveis if num_imoveis > 0 else 0
+        if not self.imoveis:
+            return
 
-        aluguel_factor = self.params.get("aluguel_factor_imovel", 0.005)
+        investimento_unitario = valor_investimento / len(self.imoveis)
+        novo_aluguel_fator = self.params.get("aluguel_factor_imovel", 0.005)
 
         for imovel in self.imoveis:
             imovel.valor *= 1 + inflacao
-            imovel.valor += investimento_por_imovel
-            imovel.aluguel = imovel.valor * aluguel_factor
+            imovel.valor += investimento_unitario
+            imovel.aluguel = imovel.valor * novo_aluguel_fator
 
-    def inicializar_historico(self, dias: int = 30) -> list:
-        self.historico_precos = []
-        vp = self.valor_patrimonial_por_acao()
+    def inicializar_historico_precos(self, dias: int = 30) -> List[float]:
+        vp = self.valor_patrimonial_por_cota()
         self.preco_cota = vp
+        self.historico_precos = [vp] * dias
         self.historico_dividendos.append(vp)
-        for _ in range(dias):
-            self.historico_precos.append(vp)
         return self.historico_precos

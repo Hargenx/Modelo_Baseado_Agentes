@@ -6,85 +6,79 @@ from multiprocessing import Pool
 from typing import List, Dict, Any
 
 from .financial_instruments import FII
-from .market_components import OrderBook
-from .economic_agents import Agente, calcular_preco_esperado_agente
+from .market_components import LivroOrdens
+from .economic_agents import Investidor, calcular_preco_esperado_investidor
 from .environment_factors import BancoCentral, Midia
 
 
-def _processar_agente_para_pool(agente_data: Dict[str, Any]) -> Dict[str, Any]:
+def _processar_investidor(dados: Dict[str, Any]) -> Dict[str, Any]:
     try:
-        lf = agente_data["literacia_financeira"]
-        hist_precos = np.array(agente_data["historico_precos"])
-        hist_riqueza = np.array(agente_data["historico_riqueza"])
-        sentimento_anterior = agente_data["sentimento"]
-        vizinhos_sentiments = agente_data["vizinhos_sentiments_snapshot"]
-        params_sentimento = agente_data["parametros_sentimento"]
-        params_agente = agente_data["agente_params"]
-        mercado_snapshot = agente_data["mercado_snapshot"]
-        bc_snapshot = agente_data["banco_central_snapshot"]
+        lf = dados["literacia_financeira"]
+        hist_precos = np.array(dados["historico_precos"])
+        hist_riqueza = np.array(dados["historico_riqueza"])
+        sentimento_ant = dados["sentimento"]
+        sentimentos_vizinhos = dados["vizinhos_sentimentos"]
+        params_sent = dados["parametros_sentimento"]
+        params_investidor = dados["parametros_investidor"]
+        mercado_snap = dados["mercado_snapshot"]
+        bc_snap = dados["banco_central_snapshot"]
 
-        # 1. Calcular expectativas
-        peso_si = params_sentimento.get("peso_sentimento_inflacao", 0.9)
-        exp_inflacao = bc_snapshot["expectativa_inflacao"] * (
-            1 - sentimento_anterior * peso_si
-        )
-        peso_sp = params_sentimento.get("peso_sentimento_expectativa", 0.9)
-        exp_premio = bc_snapshot["premio_risco"] * (1 - sentimento_anterior * peso_sp)
+        peso_si = params_sent.get("peso_sentimento_inflacao", 0.9)
+        exp_inflacao = bc_snap["expectativa_inflacao"] * (1 - sentimento_ant * peso_si)
 
-        # 2. Calcular I_social
+        peso_sp = params_sent.get("peso_sentimento_expectativa", 0.9)
+        exp_premio = bc_snap["premio_risco"] * (1 - sentimento_ant * peso_sp)
+
         i_social = (
-            np.mean(np.nan_to_num(np.array(vizinhos_sentiments)))
-            if vizinhos_sentiments
+            np.mean(np.nan_to_num(np.array(sentimentos_vizinhos)))
+            if sentimentos_vizinhos
             else 0.0
         )
 
-        # 3. Calcular I_privada (usando a função auxiliar)
-        preco_esperado = calcular_preco_esperado_agente(
+        preco_esperado = calcular_preco_esperado_investidor(
             lf,
-            params_sentimento["beta"],
-            mercado_snapshot["fii_dividendos_ultimo"],
+            params_sent["beta"],
+            mercado_snap["fii_dividendos_ultimo"],
             hist_precos,
             exp_inflacao,
             exp_premio,
-            params_agente,
+            params_investidor,
         )
+
         preco_atual = hist_precos[-1] if len(hist_precos) > 0 else 0.0
         comp_retorno = (
             np.log(preco_esperado / preco_atual)
             if preco_atual > 0 and preco_esperado > 0
             else 0.0
         )
-        n_riqueza = 5
+
+        n = 5
         comp_riqueza = (
-            (hist_riqueza[-1] - hist_riqueza[-n_riqueza]) / hist_riqueza[-n_riqueza]
-            if len(hist_riqueza) >= n_riqueza and hist_riqueza[-n_riqueza] != 0
+            (hist_riqueza[-1] - hist_riqueza[-n]) / hist_riqueza[-n]
+            if len(hist_riqueza) >= n and hist_riqueza[-n] != 0
             else 0.0
         )
-        peso_r = params_agente.get("peso_retorno_privada", 0.6)
-        peso_w = params_agente.get("peso_riqueza_privada", 0.4)
-        ruido = np.random.normal(0, params_agente.get("ruido_std_privada", 0.05))
+
+        peso_r = params_investidor.get("peso_retorno_privada", 0.6)
+        peso_w = params_investidor.get("peso_riqueza_privada", 0.4)
+        ruido = np.random.normal(0, params_investidor.get("ruido_std_privada", 0.05))
         i_privado = peso_r * comp_retorno + peso_w * comp_riqueza + ruido
 
-        # 4. Calcular sentimento e risco
-        a0, b0, c0 = (
-            params_sentimento["a0"],
-            params_sentimento["b0"],
-            params_sentimento["c0"],
-        )
-        s_bruto = (
+        a0, b0, c0 = params_sent["a0"], params_sent["b0"], params_sent["c0"]
+        sentimento_bruto = (
             a0 * lf * i_privado
             + b0 * (1 - lf) * i_social
-            + c0 * (1 - lf) * mercado_snapshot["news"]
+            + c0 * (1 - lf) * mercado_snap["news"]
         )
-        sentimento_final = max(min(s_bruto, 1), -1)
+        sentimento_final = max(min(sentimento_bruto, 1), -1)
 
-        vol_percebida = mercado_snapshot["volatilidade_historica"]
-        rd_agente = (sentimento_final + 1) / 2 * vol_percebida
+        volatilidade = mercado_snap["volatilidade_historica"]
+        risco_decisao = (sentimento_final + 1) / 2 * volatilidade
 
         return {
-            "id": agente_data["id"],
+            "id": dados["id"],
             "sentimento": sentimento_final,
-            "RD": rd_agente,
+            "RD": risco_decisao,
         }
     except Exception:
         traceback.print_exc()
@@ -94,27 +88,27 @@ def _processar_agente_para_pool(agente_data: Dict[str, Any]) -> Dict[str, Any]:
 class Mercado:
     def __init__(
         self,
-        agentes: List[Agente],
+        investidores: List[Investidor],
         fii: FII,
         banco_central: BancoCentral,
         midia: Midia,
-        params: dict,
+        parametros: dict,
     ):
-        self.agentes = agentes
+        self.investidores = investidores
         self.fii = fii
         self.banco_central = banco_central
         self.midia = midia
-        self.params = params
-        self.order_book = OrderBook()
-        self.volatilidade_historica = self.params.get("volatilidade_inicial", 0.1)
-        self.dividendos_frequencia = self.params.get("dividendos_frequencia", 21)
-        self.atualizacao_imoveis_frequencia = self.params.get(
+        self.parametros = parametros
+        self.livro_ordens = LivroOrdens()
+        self.volatilidade_historica = self.parametros.get("volatilidade_inicial", 0.1)
+        self.freq_dividendos = self.parametros.get("dividendos_frequencia", 21)
+        self.freq_atu_imoveis = self.parametros.get(
             "atualizacao_imoveis_frequencia", 126
         )
         self.news = 0
         self.dia_atual = 0
         self.pool = Pool(
-            processes=self.params.get(
+            processes=self.parametros.get(
                 "num_processos_paralelos", os.cpu_count() // 2 or 2
             )
         )
@@ -126,68 +120,67 @@ class Mercado:
         except StopIteration:
             self.news = 0
 
-        if self.dia_atual % self.dividendos_frequencia == 0:
-            dividendos_por_cota = self.fii.distribuir_dividendos()
-            for agente in self.agentes:
-                agente.caixa += agente.carteira.get("FII", 0) * dividendos_por_cota
+        if self.dia_atual % self.freq_dividendos == 0:
+            dividendo = self.fii.distribuir_dividendos()
+            for inv in self.investidores:
+                inv.caixa += inv.carteira.get("FII", 0) * dividendo
 
-        if self.dia_atual % self.atualizacao_imoveis_frequencia == 0:
-            self.fii.atualizar_imoveis_investir(self.banco_central.expectativa_inflacao)
+        if self.dia_atual % self.freq_atu_imoveis == 0:
+            self.fii.atualizar_imoveis_com_investimento(
+                self.banco_central.expectativa_inflacao
+            )
 
-        # Preparar dados para o pool
-        mercado_snapshot = {
+        mercado_snap = {
             "volatilidade_historica": self.volatilidade_historica,
             "news": self.news,
             "fii_dividendos_ultimo": self.fii.historico_dividendos[-1],
         }
-        banco_central_snapshot = {
+        bc_snap = {
             "expectativa_inflacao": self.banco_central.expectativa_inflacao,
             "premio_risco": self.banco_central.premio_risco,
         }
-        agentes_data = [
+
+        dados_investidores = [
             {
-                "id": ag.id,
-                "literacia_financeira": ag.LF,
-                "sentimento": ag.sentimento,
-                "historico_precos": ag.historico_precos.tolist(),
-                "historico_riqueza": ag.historico_riqueza.tolist(),
-                "vizinhos_sentiments_snapshot": [v.sentimento for v in ag.vizinhos],
-                "mercado_snapshot": mercado_snapshot,
-                "banco_central_snapshot": banco_central_snapshot,
+                "id": inv.id,
+                "literacia_financeira": inv.LF,
+                "sentimento": inv.sentimento,
+                "historico_precos": inv.historico_precos.tolist(),
+                "historico_riqueza": inv.historico_riqueza.tolist(),
+                "vizinhos_sentimentos": [viz.sentimento for viz in inv.vizinhos],
+                "mercado_snapshot": mercado_snap,
+                "banco_central_snapshot": bc_snap,
                 "parametros_sentimento": parametros_sentimento,
-                "agente_params": ag.params,
+                "parametros_investidor": inv.parametros,
             }
-            for ag in self.agentes
+            for inv in self.investidores
         ]
 
-        # Sincronizar resultados
-        resultados_pool = self.pool.map(_processar_agente_para_pool, agentes_data)
-        agentes_dict = {ag.id: ag for ag in self.agentes}
-        for res in resultados_pool:
-            if res and res["id"] in agentes_dict:
-                ag = agentes_dict[res["id"]]
-                ag.sentimento = res["sentimento"]
-                ag.historico_sentimentos.append(res["sentimento"])
-                ag.RD = res["RD"]
+        resultados = self.pool.map(_processar_investidor, dados_investidores)
+        investidores_dict = {inv.id: inv for inv in self.investidores}
+        for res in resultados:
+            if res and res["id"] in investidores_dict:
+                inv = investidores_dict[res["id"]]
+                inv.sentimento = res["sentimento"]
+                inv.historico_sentimentos.append(res["sentimento"])
+                inv.RD = res["RD"]
 
-        # Partes sequenciais
-        self.order_book = OrderBook()
-        for agente in self.agentes:
-            if random.random() < agente.prob_negociar:
-                ordem = agente.criar_ordem(self, parametros_sentimento)
+        self.livro_ordens = LivroOrdens()
+        for inv in self.investidores:
+            if random.random() < inv.prob_negociar:
+                ordem = inv.criar_ordem(self, parametros_sentimento)
                 if ordem:
-                    self.order_book.adicionar_ordem(ordem)
+                    self.livro_ordens.adicionar_ordem(ordem)
 
-        self.order_book.executar_ordens("FII", self)
+        self.livro_ordens.executar_ordens("FII", self)
 
-        # Atualizações de fim de dia
         self.fii.historico_precos.append(self.fii.preco_cota)
-        for agente in self.agentes:
-            agente.atualizar_historico(self.fii.preco_cota)
+        for inv in self.investidores:
+            inv.atualizar_historico(self.fii.preco_cota)
 
         if len(self.fii.historico_precos) > 1:
-            precos_validos = np.array(self.fii.historico_precos)
-            precos_validos = precos_validos[precos_validos > 0]
+            precos = np.array(self.fii.historico_precos)
+            precos_validos = precos[precos > 0]
             if len(precos_validos) > 1:
                 retornos = np.diff(np.log(precos_validos))
                 self.volatilidade_historica = np.std(retornos) * (252**0.5)

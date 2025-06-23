@@ -47,8 +47,8 @@ def gerar_literacia_financeira(media, desvio, minimo, maximo):
     return truncnorm.rvs(a, b, loc=float(media), scale=float(desvio))
 
 
-def calcular_sentimento_medio(agentes: list) -> float:
-    if not agentes:
+def calcular_sentimento_medio(investidores: list) -> float:
+    if not investidores:
         return 0.0
-    sentimentos = np.array([agente.sentimento for agente in agentes])
+    sentimentos = np.array([investidor.sentimento for investidor in investidores])
     return np.mean(sentimentos)
