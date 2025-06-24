@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict, List
 
 if TYPE_CHECKING:
-    from .economic_agents import Agente
-    from .market_environment import Mercado
+    from .agentes_economicos import Agente
+    from .ambiente_de_mercado import Mercado
 
 
 @dataclass

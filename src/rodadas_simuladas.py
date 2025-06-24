@@ -1,10 +1,10 @@
 import numpy as np
 import random
 
-from .financial_instruments import FII, Imovel
-from .economic_agents import Investidor
-from .market_environment import Mercado
-from .environment_factors import BancoCentral, Midia
+from .instrumentos_financeiros import FII, Imovel
+from .agentes_economicos import Investidor
+from .ambiente_de_mercado import Mercado
+from .fatores_de_ambiente import BancoCentral, Midia
 from . import utils
 
 

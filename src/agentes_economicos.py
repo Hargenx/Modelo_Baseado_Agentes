@@ -4,10 +4,10 @@ import random
 from typing import TYPE_CHECKING, Optional, Dict, Any
 
 if TYPE_CHECKING:
-    from .market_environment import Mercado
+    from .ambiente_de_mercado import Mercado
 
 from . import utils
-from .market_components import Ordem
+from .componentes_de_mercado import Ordem
 
 
 def calcular_preco_esperado_investidor(

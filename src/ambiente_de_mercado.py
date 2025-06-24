@@ -5,10 +5,10 @@ import numpy as np
 from multiprocessing import Pool
 from typing import List, Dict, Any
 
-from .financial_instruments import FII
-from .market_components import LivroOrdens
-from .economic_agents import Investidor, calcular_preco_esperado_investidor
-from .environment_factors import BancoCentral, Midia
+from .instrumentos_financeiros import FII
+from .componentes_de_mercado import LivroOrdens
+from .agentes_economicos import Investidor, calcular_preco_esperado_investidor
+from .fatores_de_ambiente import BancoCentral, Midia
 
 
 def _processar_investidor(dados: Dict[str, Any]) -> Dict[str, Any]:

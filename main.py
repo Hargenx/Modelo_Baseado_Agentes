@@ -2,7 +2,7 @@ import json
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from src.simulation_runner import run_single_simulation
+from src.rodadas_simuladas import run_single_simulation
 
 if __name__ == "__main__":
     with open("config/parametros.json", "r", encoding="utf-8") as f:
